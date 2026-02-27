@@ -15,9 +15,19 @@
         body { margin: 0; padding: 0; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
+        /* --- MOBILE RESPONSIVE SIDEBAR --- */
         .ui-sidebar {
             position: absolute; top: 10px; left: 10px; z-index: 100;
-            display: flex; flex-direction: column; gap: 10px; width: 280px;
+            display: flex; flex-direction: column; gap: 8px; width: 280px;
+            transition: width 0.3s ease;
+        }
+
+        @media (max-width: 600px) {
+            .ui-sidebar { width: 180px; top: 5px; left: 5px; }
+            .weather-card { padding: 10px; border-radius: 10px; }
+            #temp-display { font-size: 22px; }
+            #status-display { font-size: 12px; }
+            button { padding: 8px; font-size: 12px; }
         }
 
         .weather-card {
@@ -26,21 +36,36 @@
             text-align: center; border: 2px solid #D8BF96;
         }
 
-        #temp-display { font-size: 28px; font-weight: bold; color: #222; }
-        #status-display { font-size: 14px; color: #c64600; font-weight: 600; }
-
         #directions-container { display: none; width: 100%; }
-        .mapboxgl-ctrl-directions { position: relative !important; margin: 0 !important; width: 100% !important; border-radius: 12px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important; }
+        
+        /* --- SMOOTH MOBILE SCROLLING --- */
+        .mapbox-directions-instructions { 
+            max-height: 200px; 
+            overflow-y: auto !important; 
+            -webkit-overflow-scrolling: touch; /* Required for smooth iOS scrolling */
+            background: white;
+            border-radius: 10px;
+        }
 
-        .mapbox-directions-instructions { max-height: 250px; overflow-y: scroll !important; }
-        .mapbox-directions-instructions::-webkit-scrollbar { width: 8px; display: block; }
-        .mapbox-directions-instructions::-webkit-scrollbar-thumb { background: #D8BF96; border-radius: 10px; }
+        .mapboxgl-ctrl-directions { 
+            position: relative !important; 
+            margin: 0 !important; 
+            width: 100% !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+        }
 
         .control-buttons { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-        button { cursor: pointer; padding: 10px; background: #D8BF96; border: none; border-radius: 6px; font-weight: bold; transition: 0.3s; }
+        button { 
+            cursor: pointer; padding: 10px; background: #D8BF96; 
+            border: none; border-radius: 6px; font-weight: bold; 
+            transition: 0.3s; -webkit-tap-highlight-color: transparent; 
+        }
         button:hover { background: #c5ae88; }
 
-        .mapboxgl-popup-content { border-radius: 4px; padding: 10px; text-align: center; }
+        /* Popup scaling for mobile */
+        .mapboxgl-popup { max-width: 200px !important; }
+        .mapboxgl-popup-content { border-radius: 4px; padding: 8px; text-align: center; font-size: 13px; }
         .info-popup .mapboxgl-popup-content { background: #fff !important; color: #333 !important; text-align: left; }
         .marker-popup .mapboxgl-popup-content { background: #000 !important; color: #fff !important; text-transform: uppercase; font-weight: bold; border: 1px solid #fff; }
     </style>
@@ -72,7 +97,8 @@
         container: 'map',
         style: 'mapbox://styles/mapbox/standard', 
         center: [-6.7265, 33.9815], 
-        zoom: 17.5, pitch: 65, bearing: -25, antialias: true
+        zoom: 17.5, pitch: 65, bearing: -25, antialias: true,
+        touchZoomRotate: true // Ensures two-finger rotate works on mobile
     });
 
     let navActive = false;
@@ -80,7 +106,6 @@
     let voiceEnabled = true;
     let lastInstruction = "";
 
-    // --- VOICE LOGIC ---
     function speak(text) {
         if (voiceEnabled && 'speechSynthesis' in window) {
             window.speechSynthesis.cancel();
@@ -100,7 +125,6 @@
     
     document.getElementById('directions-container').appendChild(directions.onAdd(map));
 
-    // Listen for new navigation steps and read them aloud
     directions.on('route', (e) => {
         const route = e.route[0];
         if (route && route.legs[0].steps[0]) {
@@ -115,16 +139,13 @@
     map.on('style.load', () => {
         map.setConfigProperty('basemap', 'showTerrain', true);
 
-        // --- GPS FOLLOW (WAZE STYLE) ---
         const geolocate = new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
-            trackUserLocation: true, // Camera follows location dot
-            showUserHeading: true,   // Shows direction arrow (if sensors available)
+            trackUserLocation: true,
+            showUserHeading: true,
             showUserLocation: true
         });
         map.addControl(geolocate, 'top-right');
-
-        // Automatically trigger "Follow" mode
         map.on('load', () => geolocate.trigger());
 
         map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
@@ -182,7 +203,7 @@
             container.style.display = 'block'; 
             btn.innerText = "Exit Navigation"; 
             navStep = 0; 
-            speak("Navigation activated. Choose a start point.");
+            speak("Navigation activated.");
         } else { 
             container.style.display = 'none'; 
             btn.innerText = "Start Navigation"; 
@@ -191,10 +212,14 @@
     });
 
     async function updateWeather() {
-        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Rabat&units=metric&appid=11a0ec8735949b30f931a0880ed39b60`);
-        const data = await res.json();
-        document.getElementById('temp-display').innerText = `${Math.round(data.main.temp)}°C`;
-        document.getElementById('status-display').innerText = data.weather[0].description;
+        try {
+            const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Rabat&units=metric&appid=11a0ec8735949b30f931a0880ed39b60`);
+            const data = await res.json();
+            document.getElementById('temp-display').innerText = `${Math.round(data.main.temp)}°C`;
+            document.getElementById('status-display').innerText = data.weather[0].description;
+        } catch(e) {
+            document.getElementById('status-display').innerText = "Weather unavailable";
+        }
     }
 
     document.getElementById('toggle-theme').addEventListener('click', () => {
