@@ -15,18 +15,31 @@
         body { margin: 0; padding: 0; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
-        /* --- MOBILE RESPONSIVE SIDEBAR --- */
+        /* --- SIDEBAR CONTAINER --- */
         .ui-sidebar {
             position: absolute; top: 10px; left: 10px; z-index: 100;
             display: flex; flex-direction: column; gap: 8px; width: 280px;
-            transition: width 0.3s ease;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        /* --- HIDDEN STATE --- */
+        .ui-sidebar.hidden {
+            transform: translateX(-300px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* --- MOBILE TOGGLE BUTTON --- */
+        #menu-toggle {
+            position: absolute; top: 10px; left: 10px; z-index: 200;
+            background: #D8BF96; border: 2px solid white; border-radius: 8px;
+            padding: 10px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
 
         @media (max-width: 600px) {
-            .ui-sidebar { width: 180px; top: 5px; left: 5px; }
+            .ui-sidebar { width: 180px; top: 60px; left: 10px; }
             .weather-card { padding: 10px; border-radius: 10px; }
             #temp-display { font-size: 22px; }
-            #status-display { font-size: 12px; }
             button { padding: 8px; font-size: 12px; }
         }
 
@@ -38,21 +51,26 @@
 
         #directions-container { display: none; width: 100%; }
         
-        /* --- SMOOTH MOBILE SCROLLING --- */
         .mapbox-directions-instructions { 
             max-height: 200px; 
             overflow-y: auto !important; 
-            -webkit-overflow-scrolling: touch; /* Required for smooth iOS scrolling */
-            background: white;
+            -webkit-overflow-scrolling: touch;
+            background: white !important;
+            color: black !important;
             border-radius: 10px;
+            display: block !important;
+            visibility: visible !important;
+        }
+
+        .mapbox-directions-step {
+            color: #333 !important;
+            padding: 10px !important;
+            border-bottom: 1px solid #eee;
         }
 
         .mapboxgl-ctrl-directions { 
-            position: relative !important; 
-            margin: 0 !important; 
-            width: 100% !important;
-            border-radius: 12px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+            position: relative !important; margin: 0 !important; width: 100% !important;
+            border-radius: 12px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
         }
 
         .control-buttons { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
@@ -62,19 +80,19 @@
             transition: 0.3s; -webkit-tap-highlight-color: transparent; 
         }
         button:hover { background: #c5ae88; }
+        #btn-refresh { background: #333; color: white; margin-top: 5px; }
 
-        /* Popup scaling for mobile */
         .mapboxgl-popup { max-width: 200px !important; }
         .mapboxgl-popup-content { border-radius: 4px; padding: 8px; text-align: center; font-size: 13px; }
-        .info-popup .mapboxgl-popup-content { background: #fff !important; color: #333 !important; text-align: left; }
-        .marker-popup .mapboxgl-popup-content { background: #000 !important; color: #fff !important; text-transform: uppercase; font-weight: bold; border: 1px solid #fff; }
     </style>
 </head>
 <body>
 
+<div id="menu-toggle">☰</div>
+
 <div id="map"></div>
 
-<div class="ui-sidebar">
+<div class="ui-sidebar" id="main-sidebar">
     <div class="weather-card">
         <div style="font-size: 10px; color: #999; letter-spacing: 1px;">UM6P RABAT</div>
         <div id="temp-display">--°C</div>
@@ -85,6 +103,7 @@
             <button id="btn-voice-toggle">🔊 Voice: ON</button>
             <button id="btn-reset-points" style="display:none; background:#ffcc80">Reset Selection</button>
             <button id="clear-nav" style="background:#ff9b9b">Clear All</button>
+            <button id="btn-refresh">🔄 Reload App</button>
         </div>
     </div>
     <div id="directions-container"></div>
@@ -98,13 +117,22 @@
         style: 'mapbox://styles/mapbox/standard', 
         center: [-6.7265, 33.9815], 
         zoom: 17.5, pitch: 65, bearing: -25, antialias: true,
-        touchZoomRotate: true // Ensures two-finger rotate works on mobile
+        touchZoomRotate: true 
     });
 
     let navActive = false;
     let navStep = 0; 
     let voiceEnabled = true;
     let lastInstruction = "";
+
+    // --- MENU HIDE/SHOW LOGIC ---
+    const menuBtn = document.getElementById('menu-toggle');
+    const sidebar = document.getElementById('main-sidebar');
+
+    menuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('hidden');
+        menuBtn.innerText = sidebar.classList.contains('hidden') ? '☰' : '✕';
+    });
 
     function speak(text) {
         if (voiceEnabled && 'speechSynthesis' in window) {
@@ -127,18 +155,20 @@
 
     directions.on('route', (e) => {
         const route = e.route[0];
-        if (route && route.legs[0].steps[0]) {
-            const currentText = route.legs[0].steps[0].maneuver.instruction;
-            if (currentText !== lastInstruction) {
-                speak(currentText);
-                lastInstruction = currentText;
+        if (route && route.legs[0]) {
+            const steps = route.legs[0].steps;
+            if (steps.length > 0) {
+                const currentInstruction = steps[0].maneuver.instruction;
+                if (currentInstruction !== lastInstruction) {
+                    speak(currentInstruction);
+                    lastInstruction = currentInstruction;
+                }
             }
         }
     });
 
     map.on('style.load', () => {
         map.setConfigProperty('basemap', 'showTerrain', true);
-
         const geolocate = new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
             trackUserLocation: true,
@@ -172,6 +202,7 @@
                 directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false, className: 'marker-popup' }).setLngLat(e.lngLat).setHTML(`START: ${name}`).addTo(map);
                 navStep = 1;
+                speak("Starting point set.");
             } else if (navStep === 1) {
                 directions.setDestination([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false, className: 'marker-popup' }).setLngLat(e.lngLat).setHTML(`END: ${name}`).addTo(map);
@@ -182,6 +213,8 @@
         }
     });
 
+    document.getElementById('btn-refresh').addEventListener('click', () => { location.reload(); });
+
     document.getElementById('btn-voice-toggle').addEventListener('click', () => {
         voiceEnabled = !voiceEnabled;
         document.getElementById('btn-voice-toggle').innerText = voiceEnabled ? "🔊 Voice: ON" : "🔇 Voice: OFF";
@@ -190,7 +223,8 @@
 
     document.getElementById('btn-reset-points').addEventListener('click', () => {
         directions.removeRoutes(); directions.setOrigin(null); directions.setDestination(null);
-        navStep = 0; const popups = document.getElementsByClassName('mapboxgl-popup');
+        navStep = 0; lastInstruction = "";
+        const popups = document.getElementsByClassName('mapboxgl-popup');
         while(popups[0]) popups[0].remove();
         document.getElementById('btn-reset-points').style.display = 'none';
     });
@@ -217,9 +251,7 @@
             const data = await res.json();
             document.getElementById('temp-display').innerText = `${Math.round(data.main.temp)}°C`;
             document.getElementById('status-display').innerText = data.weather[0].description;
-        } catch(e) {
-            document.getElementById('status-display').innerText = "Weather unavailable";
-        }
+        } catch(e) { document.getElementById('status-display').innerText = "Weather unavailable"; }
     }
 
     document.getElementById('toggle-theme').addEventListener('click', () => {
@@ -228,7 +260,8 @@
 
     document.getElementById('clear-nav').addEventListener('click', () => {
         directions.removeRoutes(); directions.setOrigin(null); directions.setDestination(null);
-        navStep = 0; const popups = document.getElementsByClassName('mapboxgl-popup');
+        navStep = 0; lastInstruction = "";
+        const popups = document.getElementsByClassName('mapboxgl-popup');
         while(popups[0]) popups[0].remove();
     });
 </script>
