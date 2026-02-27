@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>UM6P Rabat - Navigator Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css' rel='stylesheet' />
+    
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.js"></script>
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.css" type="text/css">
+
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .ui-sidebar {
+            position: absolute; top: 10px; left: 10px; z-index: 100;
+            display: flex; flex-direction: column; gap: 10px; width: 280px;
+        }
+
+        .weather-card {
+            background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); font-family: 'Segoe UI', sans-serif;
+            text-align: center; border: 2px solid #D8BF96;
+        }
+
+        #temp-display { font-size: 28px; font-weight: bold; color: #222; }
+        #status-display { font-size: 14px; color: #c64600; font-weight: 600; }
+
+        #directions-container { display: none; width: 100%; }
+        .mapboxgl-ctrl-directions { position: relative !important; margin: 0 !important; width: 100% !important; border-radius: 12px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important; }
+
+        .mapbox-directions-instructions { max-height: 250px; overflow-y: scroll !important; }
+        .mapbox-directions-instructions::-webkit-scrollbar { width: 8px; display: block; }
+        .mapbox-directions-instructions::-webkit-scrollbar-thumb { background: #D8BF96; border-radius: 10px; }
+
+        .control-buttons { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+        button { cursor: pointer; padding: 10px; background: #D8BF96; border: none; border-radius: 6px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #c5ae88; }
+
+        .mapboxgl-popup-content { border-radius: 4px; padding: 10px; text-align: center; }
+        .info-popup .mapboxgl-popup-content { background: #fff !important; color: #333 !important; text-align: left; }
+        .marker-popup .mapboxgl-popup-content { background: #000 !important; color: #fff !important; text-transform: uppercase; font-weight: bold; border: 1px solid #fff; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="ui-sidebar">
+    <div class="weather-card">
+        <div style="font-size: 10px; color: #999; letter-spacing: 1px;">UM6P RABAT</div>
+        <div id="temp-display">--°C</div>
+        <div id="status-display">Syncing...</div>
+        <div class="control-buttons">
+            <button id="toggle-theme">Switch View</button>
+            <button id="btn-nav-mode">Start Navigation</button>
+            <button id="btn-voice-toggle">🔊 Voice: ON</button>
+            <button id="btn-reset-points" style="display:none; background:#ffcc80">Reset Selection</button>
+            <button id="clear-nav" style="background:#ff9b9b">Clear All</button>
+        </div>
+    </div>
+    <div id="directions-container"></div>
+</div>
+
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1Ijoic2VyZW5hMSIsImEiOiJjbWx3eDU3bjcwbjl1M2hxcXJrcjYxYnY1In0.yUEzPOyRcMoG10lgX_ZE5w';
+    
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/standard', 
+        center: [-6.7265, 33.9815], 
+        zoom: 17.5, pitch: 65, bearing: -25, antialias: true
+    });
+
+    let navActive = false;
+    let navStep = 0; 
+    let voiceEnabled = true;
+    let lastInstruction = "";
+
+    // --- VOICE LOGIC ---
+    function speak(text) {
+        if (voiceEnabled && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    const directions = new MapboxDirections({
+        accessToken: mapboxgl.accessToken,
+        unit: 'metric',
+        profile: 'mapbox/walking',
+        interactive: false,
+        controls: { inputs: true, instructions: true, profileSwitcher: false }
+    });
+    
+    document.getElementById('directions-container').appendChild(directions.onAdd(map));
+
+    // Listen for new navigation steps and read them aloud
+    directions.on('route', (e) => {
+        const route = e.route[0];
+        if (route && route.legs[0].steps[0]) {
+            const currentText = route.legs[0].steps[0].maneuver.instruction;
+            if (currentText !== lastInstruction) {
+                speak(currentText);
+                lastInstruction = currentText;
+            }
+        }
+    });
+
+    map.on('style.load', () => {
+        map.setConfigProperty('basemap', 'showTerrain', true);
+
+        // --- GPS FOLLOW (WAZE STYLE) ---
+        const geolocate = new mapboxgl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: true, // Camera follows location dot
+            showUserHeading: true,   // Shows direction arrow (if sensors available)
+            showUserLocation: true
+        });
+        map.addControl(geolocate, 'top-right');
+
+        // Automatically trigger "Follow" mode
+        map.on('load', () => geolocate.trigger());
+
+        map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
+        map.setConfigProperty('basemap', 'showPlaceLabels', false);
+
+        fetch('UM6P-full.geojson').then(res => res.json()).then(data => {
+            map.addSource('um6p-src', { type: 'geojson', data: data });
+            map.addLayer({
+                'id': 'um6p-3d', 'type': 'fill-extrusion', 'source': 'um6p-src',
+                'paint': { 'fill-extrusion-color': '#D8BF96', 'fill-extrusion-height': 15, 'fill-extrusion-opacity': 0.9 }
+            });
+        });
+        updateWeather();
+    });
+
+    map.on('click', (e) => {
+        const features = map.queryRenderedFeatures(e.point, { layers: ['um6p-3d'] });
+        const isBuilding = features.length > 0;
+        let name = isBuilding ? (features[0].properties.name || "Building") : "Ground/Road";
+
+        if (navActive) {
+            document.getElementById('btn-reset-points').style.display = 'block';
+            if (navStep === 0) {
+                directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
+                new mapboxgl.Popup({ closeButton: false, className: 'marker-popup' }).setLngLat(e.lngLat).setHTML(`START: ${name}`).addTo(map);
+                navStep = 1;
+            } else if (navStep === 1) {
+                directions.setDestination([e.lngLat.lng, e.lngLat.lat]);
+                new mapboxgl.Popup({ closeButton: false, className: 'marker-popup' }).setLngLat(e.lngLat).setHTML(`END: ${name}`).addTo(map);
+                navStep = 2;
+            }
+        } else if (isBuilding) {
+            new mapboxgl.Popup({ className: 'info-popup' }).setLngLat(e.lngLat).setHTML(`<strong>${name}</strong><br>Floors: ${features[0].properties['building:levels'] || '1'}`).addTo(map);
+        }
+    });
+
+    document.getElementById('btn-voice-toggle').addEventListener('click', () => {
+        voiceEnabled = !voiceEnabled;
+        document.getElementById('btn-voice-toggle').innerText = voiceEnabled ? "🔊 Voice: ON" : "🔇 Voice: OFF";
+        if (!voiceEnabled) window.speechSynthesis.cancel();
+    });
+
+    document.getElementById('btn-reset-points').addEventListener('click', () => {
+        directions.removeRoutes(); directions.setOrigin(null); directions.setDestination(null);
+        navStep = 0; const popups = document.getElementsByClassName('mapboxgl-popup');
+        while(popups[0]) popups[0].remove();
+        document.getElementById('btn-reset-points').style.display = 'none';
+    });
+
+    document.getElementById('btn-nav-mode').addEventListener('click', () => {
+        navActive = !navActive;
+        const container = document.getElementById('directions-container');
+        const btn = document.getElementById('btn-nav-mode');
+        if (navActive) { 
+            container.style.display = 'block'; 
+            btn.innerText = "Exit Navigation"; 
+            navStep = 0; 
+            speak("Navigation activated. Choose a start point.");
+        } else { 
+            container.style.display = 'none'; 
+            btn.innerText = "Start Navigation"; 
+            window.speechSynthesis.cancel();
+        }
+    });
+
+    async function updateWeather() {
+        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Rabat&units=metric&appid=11a0ec8735949b30f931a0880ed39b60`);
+        const data = await res.json();
+        document.getElementById('temp-display').innerText = `${Math.round(data.main.temp)}°C`;
+        document.getElementById('status-display').innerText = data.weather[0].description;
+    }
+
+    document.getElementById('toggle-theme').addEventListener('click', () => {
+        map.setConfigProperty('basemap', 'lightPreset', (map.getConfigProperty('basemap', 'lightPreset') === 'day') ? 'night' : 'day');
+    });
+
+    document.getElementById('clear-nav').addEventListener('click', () => {
+        directions.removeRoutes(); directions.setOrigin(null); directions.setDestination(null);
+        navStep = 0; const popups = document.getElementsByClassName('mapboxgl-popup');
+        while(popups[0]) popups[0].remove();
+    });
+</script>
+</body>
+</html>
