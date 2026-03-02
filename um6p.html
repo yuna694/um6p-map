@@ -153,15 +153,12 @@
     
     document.getElementById('directions-container').appendChild(directions.onAdd(map));
 
-    // --- UPDATED VOICE LOGIC FOR TURNS ---
     directions.on('route', (e) => {
         const route = e.route[0];
         if (route && route.legs[0]) {
             const steps = route.legs[0].steps;
             if (steps.length > 0) {
                 const currentInstruction = steps[0].maneuver.instruction;
-                
-                // Only speak if the instruction text is new
                 if (currentInstruction !== lastInstruction) {
                     speak(currentInstruction);
                     lastInstruction = currentInstruction;
