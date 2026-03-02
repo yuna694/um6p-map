@@ -12,42 +12,59 @@
     <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.css" type="text/css">
 
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-        
-        /* --- SIDEBAR CONTAINER --- */
-        .ui-sidebar {
-            position: absolute; top: 10px; left: 10px; z-index: 100;
-            display: flex; flex-direction: column; gap: 8px; width: 280px;
-            transition: transform 0.3s ease, opacity 0.3s ease;
+        :root {
+            --um6p-red: #B22019; 
+            --um6p-white: #FFFFFF;
+            --um6p-dark: #1F1F1F;
+            --glass-bg: rgba(255, 255, 255, 0.95);
         }
 
-        /* --- HIDDEN STATE --- */
+        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* --- PROFESSIONAL SIDEBAR --- */
+        .ui-sidebar {
+            position: absolute; top: 15px; left: 15px; z-index: 100;
+            display: flex; flex-direction: column; gap: 10px; width: 280px;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+        }
+
         .ui-sidebar.hidden {
-            transform: translateX(-300px);
+            transform: translateX(-350px);
             opacity: 0;
             pointer-events: none;
         }
 
         /* --- MOBILE TOGGLE BUTTON --- */
         #menu-toggle {
-            position: absolute; top: 10px; left: 10px; z-index: 200;
-            background: #D8BF96; border: 2px solid white; border-radius: 8px;
-            padding: 10px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            position: absolute; top: 15px; left: 15px; z-index: 200;
+            background: var(--um6p-red); border: 2px solid white; border-radius: 12px;
+            width: 45px; height: 45px; display: flex; align-items: center; justify-content: center;
+            color: white; cursor: pointer; font-size: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: 0.3s;
         }
 
         @media (max-width: 600px) {
-            .ui-sidebar { width: 180px; top: 60px; left: 10px; }
-            .weather-card { padding: 10px; border-radius: 10px; }
-            #temp-display { font-size: 22px; }
-            button { padding: 8px; font-size: 12px; }
+            .ui-sidebar { width: 200px; top: 75px; left: 15px; }
+            #temp-display { font-size: 26px !important; }
         }
 
         .weather-card {
-            background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15); font-family: 'Segoe UI', sans-serif;
-            text-align: center; border: 2px solid #D8BF96;
+            background: var(--glass-bg); padding: 20px; border-radius: 20px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.3);
+            text-align: center; border-bottom: 4px solid var(--um6p-red);
         }
+
+        .weather-card div[style*="font-size: 10px"] {
+            color: var(--um6p-red) !important;
+            font-weight: 800 !important;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #temp-display { font-size: 32px; font-weight: 700; color: var(--um6p-dark); margin: 5px 0; }
+        #status-display { font-size: 14px; color: #666; margin-bottom: 15px; text-transform: capitalize; }
 
         #directions-container { display: none; width: 100%; }
         
@@ -57,33 +74,47 @@
             -webkit-overflow-scrolling: touch;
             background: white !important;
             color: black !important;
-            border-radius: 10px;
+            border-radius: 15px;
             display: block !important;
             visibility: visible !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
 
         .mapbox-directions-step {
             color: #333 !important;
-            padding: 10px !important;
+            padding: 12px !important;
             border-bottom: 1px solid #eee;
         }
 
         .mapboxgl-ctrl-directions { 
             position: relative !important; margin: 0 !important; width: 100% !important;
-            border-radius: 12px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+            border-radius: 15px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
         }
 
-        .control-buttons { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+        .control-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
         button { 
-            cursor: pointer; padding: 10px; background: #D8BF96; 
-            border: none; border-radius: 6px; font-weight: bold; 
-            transition: 0.3s; -webkit-tap-highlight-color: transparent; 
+            cursor: pointer; padding: 12px; border: none; border-radius: 10px; 
+            font-weight: bold; font-size: 13px; transition: 0.3s;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
         }
-        button:hover { background: #c5ae88; }
-        #btn-refresh { background: #333; color: white; margin-top: 5px; }
+        
+        #btn-nav-mode { background: var(--um6p-red); color: white; }
+        #toggle-theme { background: var(--um6p-dark); color: white; }
+        #btn-voice-toggle { background: #e0e0e0; color: #333; }
+        #clear-nav { background: #ffeded; color: #d32f2f; }
+        #btn-refresh { background: #333; color: white; }
 
-        .mapboxgl-popup { max-width: 200px !important; }
-        .mapboxgl-popup-content { border-radius: 4px; padding: 8px; text-align: center; font-size: 13px; }
+        button:hover { opacity: 0.9; transform: translateY(-2px); }
+
+        .mapboxgl-popup { max-width: 220px !important; }
+        .mapboxgl-popup-content { 
+            border-radius: 15px; 
+            padding: 15px; 
+            text-align: center; 
+            font-size: 14px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
+            border-bottom: 3px solid var(--um6p-red);
+        }
     </style>
 </head>
 <body>
@@ -98,11 +129,11 @@
         <div id="temp-display">--°C</div>
         <div id="status-display">Syncing...</div>
         <div class="control-buttons">
-            <button id="toggle-theme">Switch View</button>
-            <button id="btn-nav-mode">Start Navigation</button>
+            <button id="toggle-theme">🌗 Switch View</button>
+            <button id="btn-nav-mode">📍 Start Navigation</button>
             <button id="btn-voice-toggle">🔊 Voice: ON</button>
             <button id="btn-reset-points" style="display:none; background:#ffcc80">Reset Selection</button>
-            <button id="clear-nav" style="background:#ff9b9b">Clear All</button>
+            <button id="clear-nav">🗑️ Clear All</button>
             <button id="btn-refresh">🔄 Reload App</button>
         </div>
     </div>
@@ -125,7 +156,6 @@
     let voiceEnabled = true;
     let lastInstruction = "";
 
-    // --- MENU HIDE/SHOW LOGIC ---
     const menuBtn = document.getElementById('menu-toggle');
     const sidebar = document.getElementById('main-sidebar');
 
@@ -185,7 +215,11 @@
             map.addSource('um6p-src', { type: 'geojson', data: data });
             map.addLayer({
                 'id': 'um6p-3d', 'type': 'fill-extrusion', 'source': 'um6p-src',
-                'paint': { 'fill-extrusion-color': '#D8BF96', 'fill-extrusion-height': 15, 'fill-extrusion-opacity': 0.9 }
+                'paint': { 
+                    'fill-extrusion-color': '#f8f8f8', 
+                    'fill-extrusion-height': 15, 
+                    'fill-extrusion-opacity': 0.9 
+                }
             });
         });
         updateWeather();
@@ -200,16 +234,16 @@
             document.getElementById('btn-reset-points').style.display = 'block';
             if (navStep === 0) {
                 directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
-                new mapboxgl.Popup({ closeButton: false, className: 'marker-popup' }).setLngLat(e.lngLat).setHTML(`START: ${name}`).addTo(map);
+                new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>START:</strong> ${name}`).addTo(map);
                 navStep = 1;
                 speak("Starting point set.");
             } else if (navStep === 1) {
                 directions.setDestination([e.lngLat.lng, e.lngLat.lat]);
-                new mapboxgl.Popup({ closeButton: false, className: 'marker-popup' }).setLngLat(e.lngLat).setHTML(`END: ${name}`).addTo(map);
+                new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>END:</strong> ${name}`).addTo(map);
                 navStep = 2;
             }
         } else if (isBuilding) {
-            new mapboxgl.Popup({ className: 'info-popup' }).setLngLat(e.lngLat).setHTML(`<strong>${name}</strong><br>Floors: ${features[0].properties['building:levels'] || '1'}`).addTo(map);
+            new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(`<strong>${name}</strong><br>Levels: ${features[0].properties['building:levels'] || '1'}`).addTo(map);
         }
     });
 
