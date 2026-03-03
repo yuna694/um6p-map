@@ -22,26 +22,19 @@
         body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
-        /* --- COMPACT SIDEBAR --- */
         .ui-sidebar {
             position: absolute; top: 10px; left: 10px; z-index: 100;
-            display: flex; flex-direction: column; gap: 6px; width: 230px; /* Smaller Width */
+            display: flex; flex-direction: column; gap: 6px; width: 230px; 
             transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
         }
 
-        .ui-sidebar.hidden {
-            transform: translateX(-300px);
-            opacity: 0;
-            pointer-events: none;
-        }
+        .ui-sidebar.hidden { transform: translateX(-300px); opacity: 0; pointer-events: none; }
 
-        /* --- MENU TOGGLE --- */
         #menu-toggle {
             position: absolute; top: 10px; left: 10px; z-index: 200;
             background: var(--um6p-red); border: 2px solid white; border-radius: 10px;
             width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
             color: white; cursor: pointer; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            transition: 0.3s;
         }
 
         @media (max-width: 600px) {
@@ -49,7 +42,6 @@
             #temp-display { font-size: 22px !important; }
         }
 
-        /* --- COMPACT DASHBOARD --- */
         .weather-card {
             background: var(--glass-bg); padding: 12px; border-radius: 15px;
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -57,39 +49,10 @@
             text-align: center; border-bottom: 3px solid var(--um6p-red);
         }
 
-        .weather-card div[style*="font-size: 10px"] {
-            color: var(--um6p-red) !important;
-            font-weight: 800 !important;
-            font-size: 9px !important;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
         #temp-display { font-size: 24px; font-weight: 700; color: var(--um6p-dark); margin: 2px 0; }
         #status-display { font-size: 11px; color: #666; margin-bottom: 10px; text-transform: capitalize; }
 
-        /* --- SMALLER DIRECTIONS BOXES --- */
-        .mapboxgl-ctrl-directions { 
-            width: 100% !important;
-            border-radius: 12px !important; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-        }
-
-        .mapbox-directions-inputs input {
-            height: 32px !important;
-            font-size: 12px !important;
-            padding: 5px 10px !important;
-        }
-
-        .mapbox-directions-instructions { 
-            max-height: 140px; 
-            font-size: 11px;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        }
-
-        /* --- SMALLER BUTTONS --- */
-        .control-buttons { display: flex; flex-direction: column; gap: 5px; }
+        .control-buttons { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
         button { 
             cursor: pointer; padding: 8px 10px; border: none; border-radius: 8px; 
             font-weight: bold; font-size: 11px; transition: 0.3s;
@@ -102,12 +65,8 @@
         #clear-nav { background: #fff1f1; color: #d32f2f; }
         #btn-refresh { background: #f0f0f0; color: #666; }
 
-        button:hover { opacity: 0.9; transform: scale(1.02); }
-
-        /* --- POPUPS --- */
         .mapboxgl-popup-content { 
             border-radius: 12px; padding: 12px; text-align: center; font-size: 12px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
             border-bottom: 3px solid var(--um6p-red);
         }
     </style>
@@ -115,24 +74,22 @@
 <body>
 
 <div id="menu-toggle">☰</div>
-
 <div id="map"></div>
 
 <div class="ui-sidebar" id="main-sidebar">
     <div class="weather-card">
-        <div style="font-size: 10px; color: #999; letter-spacing: 1px;">UM6P RABAT</div>
+        <div style="font-size: 10px; color: #999; letter-spacing: 1px; font-weight: 800;">UM6P RABAT</div>
         <div id="temp-display">--°C</div>
         <div id="status-display">Syncing...</div>
         <div class="control-buttons">
             <button id="toggle-theme">🌗 Switch View</button>
             <button id="btn-nav-mode">📍 Start Navigation</button>
             <button id="btn-voice-toggle">🔊 Voice: ON</button>
-            <button id="btn-reset-points" style="display:none; background:#ffcc80">Reset Selection</button>
             <button id="clear-nav">🗑️ Clear All</button>
             <button id="btn-refresh">🔄 Reload App</button>
         </div>
     </div>
-    <div id="directions-container"></div>
+    <div id="directions-container" style="display:none; margin-top:5px;"></div>
 </div>
 
 <script>
@@ -201,7 +158,8 @@
             showUserLocation: true
         });
         map.addControl(geolocate, 'top-right');
-        map.on('load', () => geolocate.trigger());
+        
+        // Manual GPS: geolocate.trigger() is removed so it won't start automatically.
 
         map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
         map.setConfigProperty('basemap', 'showPlaceLabels', false);
@@ -226,7 +184,6 @@
         let name = isBuilding ? (features[0].properties.name || "Building") : "Ground/Road";
 
         if (navActive) {
-            document.getElementById('btn-reset-points').style.display = 'block';
             if (navStep === 0) {
                 directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>START:</strong> ${name}`).addTo(map);
@@ -247,14 +204,6 @@
         voiceEnabled = !voiceEnabled;
         document.getElementById('btn-voice-toggle').innerText = voiceEnabled ? "🔊 Voice: ON" : "🔇 Voice: OFF";
         if (!voiceEnabled) window.speechSynthesis.cancel();
-    });
-
-    document.getElementById('btn-reset-points').addEventListener('click', () => {
-        directions.removeRoutes(); directions.setOrigin(null); directions.setDestination(null);
-        navStep = 0; lastInstruction = "";
-        const popups = document.getElementsByClassName('mapboxgl-popup');
-        while(popups[0]) popups[0].remove();
-        document.getElementById('btn-reset-points').style.display = 'none';
     });
 
     document.getElementById('btn-nav-mode').addEventListener('click', () => {
