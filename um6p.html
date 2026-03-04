@@ -38,11 +38,6 @@
             color: white; cursor: pointer; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
 
-        @media (max-width: 600px) {
-            .ui-sidebar { width: 180px; top: 60px; left: 10px; }
-            #temp-display { font-size: 22px !important; }
-        }
-
         .weather-card {
             background: var(--glass-bg); padding: 12px; border-radius: 15px;
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -124,12 +119,18 @@
         menuBtn.innerText = sidebar.classList.contains('hidden') ? '☰' : '✕';
     });
 
+    // --- MOBILE VOICE FIX ---
     function speak(text) {
         if (voiceEnabled && 'speechSynthesis' in window) {
+            // Cancel current speech to prevent overlapping
             window.speechSynthesis.cancel();
+            
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
-            utterance.rate = 0.9;
+            utterance.rate = 1.0;
+            utterance.volume = 1.0;
+            
+            // Warm up the engine for mobile
             window.speechSynthesis.speak(utterance);
         }
     }
@@ -144,7 +145,6 @@
     
     document.getElementById('directions-container').appendChild(directions.onAdd(map));
 
-    // Monitor the route and store its shape for distance checking
     directions.on('route', (e) => {
         const route = e.route[0];
         if (route && route.legs[0]) {
@@ -177,16 +177,15 @@
         });
         map.addControl(geolocate, 'top-right');
 
-        // WAZE LOGIC: Recalculate if user drifts away
+        // RECALCULATING LOGIC
         geolocate.on('geolocate', (position) => {
             if (navActive && currentRouteGeometry) {
                 const userPoint = turf.point([position.coords.longitude, position.coords.latitude]);
                 const routeLine = turf.lineString(currentRouteGeometry.coordinates);
                 const distance = turf.pointToLineDistance(userPoint, routeLine, {units: 'meters'});
 
-                // If user is more than 20 meters off track
-                if (distance > 20) {
-                    speak("Off route. Recalculating your trip.");
+                if (distance > 30) { 
+                    speak("Off route. Recalculating.");
                     directions.setOrigin([position.coords.longitude, position.coords.latitude]);
                 }
             }
@@ -202,9 +201,18 @@
                 'type': 'fill-extrusion', 
                 'source': 'um6p-src',
                 'paint': { 
-                    'fill-extrusion-color': '#f8f8f8', 
+                    'fill-extrusion-color': [
+                        'match', ['get', 'building:material'],
+                        'glass', '#a5d6f1',
+                        '#E8DCC4'
+                    ],
+                    'fill-extrusion-opacity': [
+                        'case',
+                        ['==', ['get', 'building:material'], 'glass'], 0.6,
+                        1.0
+                    ],
                     'fill-extrusion-height': ['coalesce', ['to-number', ['get', 'height']], 15], 
-                    'fill-extrusion-opacity': 0.9 
+                    'fill-extrusion-base': 0
                 }
             });
         });
@@ -221,12 +229,12 @@
                 directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>START:</strong> ${name}`).addTo(map);
                 navStep = 1;
-                speak("Starting point set. Please select your destination.");
+                speak("Starting point set.");
             } else if (navStep === 1) {
                 directions.setDestination([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>END:</strong> ${name}`).addTo(map);
                 navStep = 2;
-                speak("Calculating route. Follow the blue line.");
+                speak("Calculating route.");
             }
         } else if (isBuilding) {
             const props = features[0].properties;
@@ -248,11 +256,13 @@
         navActive = !navActive;
         const container = document.getElementById('directions-container');
         const btn = document.getElementById('btn-nav-mode');
+        
         if (navActive) { 
+            // THIS TAP UNLOCKS VOICE FOR MOBILE
+            speak("Navigation activated. I will guide you.");
             container.style.display = 'block'; 
             btn.innerText = "Exit Navigation"; 
             navStep = 0; 
-            speak("Navigation activated. Choose where you want to go.");
         } else { 
             container.style.display = 'none'; 
             btn.innerText = "Start Navigation"; 
