@@ -38,11 +38,6 @@
             color: white; cursor: pointer; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
 
-        @media (max-width: 600px) {
-            .ui-sidebar { width: 180px; top: 60px; left: 10px; }
-            #temp-display { font-size: 22px !important; }
-        }
-
         .weather-card {
             background: var(--glass-bg); padding: 12px; border-radius: 15px;
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -96,17 +91,12 @@
 <script>
     mapboxgl.accessToken = 'pk.eyJ1Ijoic2VyZW5hMSIsImEiOiJjbWx3eDU3bjcwbjl1M2hxcXJrcjYxYnY1In0.yUEzPOyRcMoG10lgX_ZE5w';
     
-    const campusBounds = [
-        [-6.7350, 33.9750], 
-        [-6.7180, 33.9880]  
-    ];
-
     const map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/mapbox/standard', 
         center: [-6.7265, 33.9815], 
         zoom: 17.5, pitch: 65, bearing: -25, antialias: true,
-        maxBounds: campusBounds,
+        maxBounds: [[-6.7350, 33.9750], [-6.7180, 33.9880]],
         minZoom: 16
     });
 
@@ -129,7 +119,7 @@
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
-            utterance.rate = 0.9;
+            utterance.rate = 1.0;
             window.speechSynthesis.speak(utterance);
         }
     }
@@ -139,19 +129,25 @@
         unit: 'metric',
         profile: 'mapbox/walking',
         interactive: false,
+        // MUST BE TRUE for turn-by-turn maneuvers
+        steps: true, 
         controls: { inputs: true, instructions: true, profileSwitcher: false }
     });
     
     document.getElementById('directions-container').appendChild(directions.onAdd(map));
 
-    // Monitor the route and store its shape for distance checking
+    // Monitor the route for Maneuver Changes
     directions.on('route', (e) => {
         const route = e.route[0];
         if (route && route.legs[0]) {
             currentRouteGeometry = route.geometry;
             const steps = route.legs[0].steps;
+            
             if (steps.length > 0) {
+                // Get the text instruction (e.g., "Turn right onto...")
                 const currentInstruction = steps[0].maneuver.instruction;
+                
+                // Only speak if it's a new instruction
                 if (currentInstruction !== lastInstruction) {
                     speak(currentInstruction);
                     lastInstruction = currentInstruction;
@@ -177,16 +173,14 @@
         });
         map.addControl(geolocate, 'top-right');
 
-        // WAZE LOGIC: Recalculate if user drifts away
         geolocate.on('geolocate', (position) => {
             if (navActive && currentRouteGeometry) {
                 const userPoint = turf.point([position.coords.longitude, position.coords.latitude]);
                 const routeLine = turf.lineString(currentRouteGeometry.coordinates);
                 const distance = turf.pointToLineDistance(userPoint, routeLine, {units: 'meters'});
 
-                // If user is more than 20 meters off track
-                if (distance > 20) {
-                    speak("Off route. Recalculating your trip.");
+                if (distance > 25) {
+                    speak("Off route. Recalculating.");
                     directions.setOrigin([position.coords.longitude, position.coords.latitude]);
                 }
             }
@@ -202,7 +196,7 @@
                 'type': 'fill-extrusion', 
                 'source': 'um6p-src',
                 'paint': { 
-                    'fill-extrusion-color': '#f8f8f8', 
+                    'fill-extrusion-color': ['match', ['get', 'building:material'], 'glass', '#a5d6f1', '#E8DCC4'],
                     'fill-extrusion-height': ['coalesce', ['to-number', ['get', 'height']], 15], 
                     'fill-extrusion-opacity': 0.9 
                 }
@@ -219,42 +213,27 @@
             let name = isBuilding ? (features[0].properties.name || "Building") : "Ground/Road";
             if (navStep === 0) {
                 directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
-                new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>START:</strong> ${name}`).addTo(map);
                 navStep = 1;
-                speak("Starting point set. Please select your destination.");
+                speak("Starting point set. Choose your destination.");
             } else if (navStep === 1) {
                 directions.setDestination([e.lngLat.lng, e.lngLat.lat]);
-                new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>END:</strong> ${name}`).addTo(map);
                 navStep = 2;
-                speak("Calculating route. Follow the blue line.");
+                speak("Calculating route. Walk toward the blue line.");
             }
         } else if (isBuilding) {
-            const props = features[0].properties;
-            new mapboxgl.Popup()
-                .setLngLat(e.lngLat)
-                .setHTML(`<strong>${props.name || "Building"}</strong><br>Levels: ${props['building:levels'] || '1'}`)
-                .addTo(map);
+            new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(`<strong>${features[0].properties.name || "Building"}</strong><br>Levels: ${features[0].properties['building:levels'] || '1'}`).addTo(map);
         }
-    });
-
-    document.getElementById('btn-refresh').addEventListener('click', () => { location.reload(); });
-    document.getElementById('btn-voice-toggle').addEventListener('click', () => {
-        voiceEnabled = !voiceEnabled;
-        document.getElementById('btn-voice-toggle').innerText = voiceEnabled ? "🔊 Voice: ON" : "🔇 Voice: OFF";
-        if (!voiceEnabled) window.speechSynthesis.cancel();
     });
 
     document.getElementById('btn-nav-mode').addEventListener('click', () => {
         navActive = !navActive;
-        const container = document.getElementById('directions-container');
         const btn = document.getElementById('btn-nav-mode');
         if (navActive) { 
-            container.style.display = 'block'; 
+            // THIS TAP UNLOCKS MOBILE VOICE
+            speak("Navigation activated."); 
             btn.innerText = "Exit Navigation"; 
             navStep = 0; 
-            speak("Navigation activated. Choose where you want to go.");
         } else { 
-            container.style.display = 'none'; 
             btn.innerText = "Start Navigation"; 
             window.speechSynthesis.cancel();
             lastInstruction = "";
@@ -277,8 +256,6 @@
     document.getElementById('clear-nav').addEventListener('click', () => {
         directions.removeRoutes(); directions.setOrigin(null); directions.setDestination(null);
         navStep = 0; lastInstruction = "";
-        const popups = document.getElementsByClassName('mapboxgl-popup');
-        while(popups[0]) popups[0].remove();
     });
 </script>
 </body>
