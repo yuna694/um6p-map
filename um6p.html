@@ -10,6 +10,8 @@
     
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.js"></script>
     <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.css" type="text/css">
+    
+    <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
 
     <style>
         :root {
@@ -19,7 +21,7 @@
             --glass-bg: rgba(255, 255, 255, 0.95);
         }
 
-        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #e0e0e0; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
         .ui-sidebar {
@@ -27,7 +29,6 @@
             display: flex; flex-direction: column; gap: 6px; width: 230px; 
             transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
         }
-
         .ui-sidebar.hidden { transform: translateX(-300px); opacity: 0; pointer-events: none; }
 
         #menu-toggle {
@@ -95,18 +96,25 @@
 <script>
     mapboxgl.accessToken = 'pk.eyJ1Ijoic2VyZW5hMSIsImEiOiJjbWx3eDU3bjcwbjl1M2hxcXJrcjYxYnY1In0.yUEzPOyRcMoG10lgX_ZE5w';
     
+    const campusBounds = [
+        [-6.7350, 33.9750], 
+        [-6.7180, 33.9880]  
+    ];
+
     const map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/mapbox/standard', 
         center: [-6.7265, 33.9815], 
         zoom: 17.5, pitch: 65, bearing: -25, antialias: true,
-        touchZoomRotate: true 
+        maxBounds: campusBounds,
+        minZoom: 16
     });
 
     let navActive = false;
     let navStep = 0; 
     let voiceEnabled = true;
     let lastInstruction = "";
+    let currentRouteGeometry = null;
 
     const menuBtn = document.getElementById('menu-toggle');
     const sidebar = document.getElementById('main-sidebar');
@@ -121,6 +129,7 @@
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
+            utterance.rate = 0.9;
             window.speechSynthesis.speak(utterance);
         }
     }
@@ -135,9 +144,11 @@
     
     document.getElementById('directions-container').appendChild(directions.onAdd(map));
 
+    // Monitor the route and store its shape for distance checking
     directions.on('route', (e) => {
         const route = e.route[0];
         if (route && route.legs[0]) {
+            currentRouteGeometry = route.geometry;
             const steps = route.legs[0].steps;
             if (steps.length > 0) {
                 const currentInstruction = steps[0].maneuver.instruction;
@@ -150,7 +161,14 @@
     });
 
     map.on('style.load', () => {
-        map.setConfigProperty('basemap', 'showTerrain', true);
+        const style = map.getStyle();
+        style.layers.forEach(layer => {
+            if (layer.id !== 'background') {
+                map.setLayoutProperty(layer.id, 'visibility', 'none');
+            }
+        });
+        map.setPaintProperty('background', 'background-color', '#e0e0e0');
+
         const geolocate = new mapboxgl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
             trackUserLocation: true,
@@ -158,19 +176,34 @@
             showUserLocation: true
         });
         map.addControl(geolocate, 'top-right');
-        
-        // Manual GPS: geolocate.trigger() is removed so it won't start automatically.
 
+        // WAZE LOGIC: Recalculate if user drifts away
+        geolocate.on('geolocate', (position) => {
+            if (navActive && currentRouteGeometry) {
+                const userPoint = turf.point([position.coords.longitude, position.coords.latitude]);
+                const routeLine = turf.lineString(currentRouteGeometry.coordinates);
+                const distance = turf.pointToLineDistance(userPoint, routeLine, {units: 'meters'});
+
+                // If user is more than 20 meters off track
+                if (distance > 20) {
+                    speak("Off route. Recalculating your trip.");
+                    directions.setOrigin([position.coords.longitude, position.coords.latitude]);
+                }
+            }
+        });
+        
         map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
         map.setConfigProperty('basemap', 'showPlaceLabels', false);
 
-        fetch('UM6P-full.geojson').then(res => res.json()).then(data => {
+        fetch('um6p the one .geojson').then(res => res.json()).then(data => {
             map.addSource('um6p-src', { type: 'geojson', data: data });
             map.addLayer({
-                'id': 'um6p-3d', 'type': 'fill-extrusion', 'source': 'um6p-src',
+                'id': 'um6p-3d', 
+                'type': 'fill-extrusion', 
+                'source': 'um6p-src',
                 'paint': { 
                     'fill-extrusion-color': '#f8f8f8', 
-                    'fill-extrusion-height': 15, 
+                    'fill-extrusion-height': ['coalesce', ['to-number', ['get', 'height']], 15], 
                     'fill-extrusion-opacity': 0.9 
                 }
             });
@@ -181,21 +214,26 @@
     map.on('click', (e) => {
         const features = map.queryRenderedFeatures(e.point, { layers: ['um6p-3d'] });
         const isBuilding = features.length > 0;
-        let name = isBuilding ? (features[0].properties.name || "Building") : "Ground/Road";
-
+        
         if (navActive) {
+            let name = isBuilding ? (features[0].properties.name || "Building") : "Ground/Road";
             if (navStep === 0) {
                 directions.setOrigin([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>START:</strong> ${name}`).addTo(map);
                 navStep = 1;
-                speak("Starting point set.");
+                speak("Starting point set. Please select your destination.");
             } else if (navStep === 1) {
                 directions.setDestination([e.lngLat.lng, e.lngLat.lat]);
                 new mapboxgl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<strong>END:</strong> ${name}`).addTo(map);
                 navStep = 2;
+                speak("Calculating route. Follow the blue line.");
             }
         } else if (isBuilding) {
-            new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(`<strong>${name}</strong><br>Levels: ${features[0].properties['building:levels'] || '1'}`).addTo(map);
+            const props = features[0].properties;
+            new mapboxgl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(`<strong>${props.name || "Building"}</strong><br>Levels: ${props['building:levels'] || '1'}`)
+                .addTo(map);
         }
     });
 
@@ -214,11 +252,12 @@
             container.style.display = 'block'; 
             btn.innerText = "Exit Navigation"; 
             navStep = 0; 
-            speak("Navigation activated.");
+            speak("Navigation activated. Choose where you want to go.");
         } else { 
             container.style.display = 'none'; 
             btn.innerText = "Start Navigation"; 
             window.speechSynthesis.cancel();
+            lastInstruction = "";
         }
     });
 
